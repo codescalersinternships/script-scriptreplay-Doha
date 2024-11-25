@@ -1,6 +1,9 @@
 {
     "cSpell.words": [
         "creack",
-        "ptmx"
-    ]
+        "openpt",
+        "ptmx",
+        "TIOCSPTLCK"
+    ],
+    "C_Cpp.errorSquiggles": "disabled"
 }

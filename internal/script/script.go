@@ -13,20 +13,18 @@ import (
 )
 
 func Script(filename string) error {
-	// Create arbitrary command.
+
 	c := exec.Command("bash")
 
-	// Start the command with a pty.
 	ptmx, err := pty.Start(c)
 	if err != nil {
 		return err
 	}
-	// Make sure to close the pty at the end.
-	defer func() { _ = ptmx.Close() }() // Best effort.
+	defer func() { _ = ptmx.Close() }()
 
-	// Handle pty size.
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
+
 	go func() {
 		for range ch {
 			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
@@ -34,27 +32,22 @@ func Script(filename string) error {
 			}
 		}
 	}()
-	ch <- syscall.SIGWINCH                        // Initial resize.
-	defer func() { signal.Stop(ch); close(ch) }() // Cleanup signals when done.
+	ch <- syscall.SIGWINCH
+	defer func() { signal.Stop(ch); close(ch) }()
 
-	// Set stdin in raw mode.
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		panic(err)
 	}
-	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
-
+	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
 
 	go func() {
 		_, _ = io.Copy(ptmx, os.Stdin)
 	}()
-
 	_, _ = io.Copy(os.Stdout, ptmx)
-
 
 	return nil
 }
-
 
 func ReadWrite(filename *os.File) {
 	scriptFile, err := os.OpenFile(filename.Name(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
