@@ -2,59 +2,46 @@ package script
 
 import (
 	"io"
-	"log"
 	"os"
 	"os/exec"
-	"os/signal"
-	"syscall"
 
-	"github.com/creack/pty"
 	"golang.org/x/term"
 )
 
 func Script(filename string) error {
-
 	c := exec.Command("bash")
-
-	ptmx, err := pty.Start(c)
+	pty, err := PtyFork(c)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = ptmx.Close() }()
-
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGWINCH)
-
-	go func() {
-		for range ch {
-			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
-				log.Printf("error resizing pty: %s", err)
-			}
-		}
-	}()
-	ch <- syscall.SIGWINCH
-	defer func() { signal.Stop(ch); close(ch) }()
+	defer pty.Close()
 
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
+	defer term.Restore(int(os.Stdin.Fd()), oldState)
+
+	logFile, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer logFile.Close()
+
+	outputWriter := io.MultiWriter(os.Stdout, logFile)
+
+	done := make(chan error)
 
 	go func() {
-		_, _ = io.Copy(ptmx, os.Stdin)
+		_, err := io.Copy(outputWriter, pty)
+		done <- err
 	}()
-	_, _ = io.Copy(os.Stdout, ptmx)
 
-	return nil
-}
+	go func() {
+		_, err = io.Copy(pty, os.Stdin)
+		done <- err
+	}()
 
-func ReadWrite(filename *os.File) {
-	scriptFile, err := os.OpenFile(filename.Name(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer scriptFile.Close()
-	_, _ = io.Copy(scriptFile, filename)
+	c.Wait()
+	return err
 }

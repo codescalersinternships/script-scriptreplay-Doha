@@ -3,6 +3,7 @@
         "creack",
         "openpt",
         "ptmx",
+        "pymaster",
         "TIOCSPTLCK"
     ],
     "C_Cpp.errorSquiggles": "disabled"
